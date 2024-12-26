@@ -1,0 +1,14 @@
+# Core ML Libraries
+torch
+torchvision
+numpy
+
+# Data Augmentation
+albumentations
+
+# Testing
+pytest
+
+# Training Utilities
+tqdm
+matplotlib
