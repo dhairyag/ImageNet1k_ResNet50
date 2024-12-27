@@ -80,7 +80,7 @@ class ImageNetAlbumentations:
     def _load_train_data(self, split_dir):
         """Load training data with class subdirectories"""
         class_dirs = sorted(split_dir.glob('*'))
-        print(f"Found {len(class_dirs)} class directories")
+        #print(f"Found {len(class_dirs)} class directories")
         
         # Create class to index mapping
         self.class_to_idx = {class_dir.name: idx 
@@ -96,7 +96,7 @@ class ImageNetAlbumentations:
                     class_idx = self.class_to_idx[class_dir.name]
                     self.samples.extend([(str(img_path), class_idx) 
                                       for img_path in class_samples])
-                    print(f"Class {class_dir.name}: Found {len(class_samples)} images")
+                    #print(f"Class {class_dir.name}: Found {len(class_samples)} images")
                 else:
                     print(f"Warning: No images found in {class_dir}")
     

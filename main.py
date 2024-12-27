@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 from torchinfo import summary
 from torch.optim.lr_scheduler import MultiStepLR
 from torch.optim.lr_scheduler import LinearLR, SequentialLR
+from torch.optim.lr_scheduler import CosineAnnealingLR
 
 def save_checkpoint(state, is_best, checkpoint_dir='checkpoints', filename='checkpoint.pth.tar'):
     """Save checkpoint and best model"""
@@ -36,7 +37,7 @@ def main():
         # Hyperparameters
         batch_size = 256
         epochs = 90
-        base_lr = 0.1
+        base_lr = 0.1  # Lower initial LR due to smaller dataset
         momentum = 0.9
         weight_decay = 1e-4
         
@@ -51,13 +52,29 @@ def main():
         optimizer = optim.SGD(model.parameters(), lr=base_lr,
                             momentum=momentum, weight_decay=weight_decay)
         
-        # Learning rate scheduler
-        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, 
-                                                milestones=[30, 60, 80], 
-                                                gamma=0.1)
+        # Learning rate scheduler with warmup and cosine decay
+        warmup_epochs = 5
+        warmup_scheduler = LinearLR(
+            optimizer,
+            start_factor=0.1,
+            end_factor=1.0,
+            total_iters=warmup_epochs
+        )
+
+        cosine_scheduler = CosineAnnealingLR(
+            optimizer,
+            T_max=epochs - warmup_epochs,
+            eta_min=1e-6
+        )
+
+        scheduler = SequentialLR(
+            optimizer,
+            schedulers=[warmup_scheduler, cosine_scheduler],
+            milestones=[warmup_epochs]
+        )
         
         # Data loading
-        subset_fraction = 0.01  # Use 1% of the data
+        subset_fraction = 0.04  # Use 1% of the data
         data_root = './imagenet-object-localization-challenge/ILSVRC/Data/CLS-LOC'
         annotations_root = './imagenet-object-localization-challenge/ILSVRC/Annotations/CLS-LOC'
         
@@ -120,6 +137,14 @@ def main():
         train_acc = []
         val_acc = []
         lr_history = []
+        
+        # Run LR finder if needed
+        # if args.find_lr:  # Add argument parser for this
+        #     from lr_finder import find_lr
+        #     suggested_lr = find_lr()
+        #     base_lr = suggested_lr / 10  # Conservative starting point
+        # else:
+        #     base_lr = 0.01  # Default value
         
         for epoch in range(start_epoch, epochs + 1):
             print(f'\nEpoch: {epoch}')
