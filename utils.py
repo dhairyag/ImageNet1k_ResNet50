@@ -26,31 +26,42 @@ def visualize_augmentations(dataset, samples=36):
     plt.tight_layout()
     plt.show()
 
-def train(model, device, train_loader, optimizer, criterion, epoch):
+def train(model, device, train_loader, optimizer, criterion, epoch, scaler=None):
     model.train()
     pbar = tqdm(train_loader)
     top1 = AverageMeter('Acc@1')
     top5 = AverageMeter('Acc@5')
     losses = AverageMeter('Loss')
     
-    # Add gradient clipping
-    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-    
     for batch_idx, (data, target) in enumerate(pbar):
-        data, target = data.to(device), target.to(device)
+        # Use channels last memory format for CUDA
+        data = data.to(device, memory_format=torch.channels_last, non_blocking=True)
+        target = target.to(device, non_blocking=True)
         
-        optimizer.zero_grad()
-        output = model(data)
-        loss = criterion(output, target)
+        optimizer.zero_grad(set_to_none=True)
+        
+        # Use mixed precision for CUDA
+        if device.type == 'cuda':
+            with torch.amp.autocast('cuda'):
+                output = model(data)
+                loss = criterion(output, target)
+            
+            # Scale loss and do backward pass
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            # Regular training for non-CUDA devices
+            output = model(data)
+            loss = criterion(output, target)
+            loss.backward()
+            optimizer.step()
         
         # Measure accuracy
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
         losses.update(loss.item(), data.size(0))
         top1.update(acc1[0], data.size(0))
         top5.update(acc5[0], data.size(0))
-        
-        loss.backward()
-        optimizer.step()
         
         pbar.set_description(
             f'Train Epoch: {epoch} Loss: {losses.avg:.3f} '
@@ -82,5 +93,23 @@ def test(model, device, test_loader, criterion):
           f'Acc@1: {top1.avg:.3f}%, Acc@5: {top5.avg:.3f}%\n')
     
     return losses.avg, top1.avg
+
+def print_mps_memory():
+    """Print MPS memory usage statistics"""
+    if torch.backends.mps.is_available():
+        try:
+            print("\nMPS Memory Usage:")
+            # Only check current_allocated_memory as it's the most commonly available
+            if hasattr(torch.mps, 'current_allocated_memory'):
+                current_mem = torch.mps.current_allocated_memory() / (1024 * 1024)  # Convert to MB
+                print(f"Current allocated: {current_mem:.2f} MB")
+            
+            # Optional: driver allocated memory (if available)
+            if hasattr(torch.mps, 'driver_allocated_memory'):
+                driver_mem = torch.mps.driver_allocated_memory() / (1024 * 1024)  # Convert to MB
+                print(f"Driver allocated: {driver_mem:.2f} MB")
+            print()
+        except Exception as e:
+            print(f"Note: Some MPS memory stats unavailable ({str(e)})")
 
 

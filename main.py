@@ -5,47 +5,91 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from albumentation import ImageNetAlbumentations, train_transforms, val_transforms
 from model import ResNet50
-from utils import train, test
+from utils import train, test, print_mps_memory
 import matplotlib.pyplot as plt
 from torchinfo import summary
 from torch.optim.lr_scheduler import MultiStepLR
 from torch.optim.lr_scheduler import LinearLR, SequentialLR
 from torch.optim.lr_scheduler import CosineAnnealingLR
+import torch.backends.mps
+from torch.amp import autocast, GradScaler
+from torch.cuda.amp import autocast
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
+
+main_dir = "/mnt/imagenet/assignment/"
 
 def save_checkpoint(state, is_best, checkpoint_dir='checkpoints', filename='checkpoint.pth.tar'):
     """Save checkpoint and best model"""
-    if not os.path.exists(checkpoint_dir):
-        os.makedirs(checkpoint_dir)
+    if not os.path.exists(main_dir + checkpoint_dir):
+        os.makedirs(main_dir + checkpoint_dir)
     
-    filepath = os.path.join(checkpoint_dir, filename)
+    filepath = os.path.join(main_dir, checkpoint_dir, filename)
     torch.save(state, filepath)
     
     if is_best:
-        best_filepath = os.path.join(checkpoint_dir, 'model_best.pth.tar')
+        best_filepath = os.path.join(main_dir, checkpoint_dir, 'model_best.pth.tar')
         torch.save(state, best_filepath)
 
 def main():
     try:
         # Create checkpoint directory
         checkpoint_dir = 'checkpoints'
-        if not os.path.exists(checkpoint_dir):
-            os.makedirs(checkpoint_dir)
+        if not os.path.exists(main_dir + checkpoint_dir):
+            os.makedirs(main_dir + checkpoint_dir)
         
-        # Set device
-        device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
+        # Set device and configure device-specific settings
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+            # Enable TF32 on Ampere GPUs
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
+            # Optimize for fixed input sizes
+            torch.backends.cudnn.benchmark = True
+            torch.backends.cudnn.enabled = True
+            # Print GPU info
+            print(f"Using CUDA device: {torch.cuda.get_device_name()}")
+            print(f"Available GPU memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
+            
+            # Hyperparameters optimized for 16GB GPU
+            batch_size = 512  # Increased for faster training
+            num_workers = 8   # Adjust based on CPU cores
+            pin_memory = True
+            prefetch_factor = 2  # Prefetch 2 batches per worker
+        elif torch.backends.mps.is_available():
+            device = torch.device("mps")
+            if hasattr(torch.backends.mps, 'enable_async_copy'):
+                torch.backends.mps.enable_async_copy()
+            print("Using MPS (Apple Silicon)")
+        else:
+            device = torch.device("cpu")
+            print("Using CPU")
         
-        # Hyperparameters
-        batch_size = 256
+        # Hyperparameters - adjusted for different devices
+        if device.type == "cuda":
+            batch_size = 256  # Can be larger on GPU
+            num_workers = 8   # More workers for GPU
+            pin_memory = True
+        elif device.type == "mps":
+            batch_size = 128  # Reduced for MPS
+            num_workers = 12   # Fewer workers for MacBook
+            pin_memory = True #False
+        else:
+            batch_size = 64   # Smallest for CPU
+            num_workers = 2
+            pin_memory = False
+        
         epochs = 90
-        base_lr = 0.1  # Lower initial LR due to smaller dataset
+        base_lr = 0.05
         momentum = 0.9
         weight_decay = 1e-4
-        
+
         # Model
-        model = ResNet50(num_classes=1000).to(device)
+        model = ResNet50(num_classes=1000).to(device, memory_format=torch.channels_last)  # Use channels_last memory format
         
         if torch.cuda.device_count() > 1:
-            model = nn.DataParallel(model)
+            print(f"Using {torch.cuda.device_count()} GPUs!")
+            model = DDP(model)  # Use DistributedDataParallel instead of DataParallel
         
         # Loss and optimizer
         criterion = nn.CrossEntropyLoss()
@@ -74,9 +118,9 @@ def main():
         )
         
         # Data loading
-        subset_fraction = 0.04  # Use 1% of the data
-        data_root = './imagenet-object-localization-challenge/ILSVRC/Data/CLS-LOC'
-        annotations_root = './imagenet-object-localization-challenge/ILSVRC/Annotations/CLS-LOC'
+        subset_fraction = 1.0
+        data_root = main_dir + 'imagenet-object-localization-challenge/ILSVRC/Data/CLS-LOC'
+        annotations_root = main_dir + 'imagenet-object-localization-challenge/ILSVRC/Annotations/CLS-LOC'
         
         train_dataset = ImageNetAlbumentations(
             root=data_root,
@@ -98,18 +142,21 @@ def main():
             train_dataset,
             batch_size=batch_size,
             shuffle=True,
-            num_workers=4,  # Reduced from 8 to 4 for better stability
-            pin_memory=True,
-            persistent_workers=True
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+            persistent_workers=True,
+            prefetch_factor=prefetch_factor,
+            generator=torch.Generator(device='cpu')
         )
         
         val_loader = DataLoader(
             val_dataset,
             batch_size=batch_size,
             shuffle=False,
-            num_workers=4,  # Reduced from 8 to 4
-            pin_memory=True,
-            persistent_workers=True
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+            persistent_workers=True,
+            generator=torch.Generator(device='cpu')
         )
         
         # Print model summary and parameters using torchinfo
@@ -120,7 +167,7 @@ def main():
         best_acc = 0
         
         # Resume from checkpoint if exists
-        checkpoint_path = os.path.join(checkpoint_dir, 'checkpoint.pth.tar')
+        checkpoint_path = os.path.join(main_dir, checkpoint_dir, 'checkpoint.pth.tar')
         if os.path.exists(checkpoint_path):
             print(f"=> loading checkpoint '{checkpoint_path}'")
             checkpoint = torch.load(checkpoint_path)
@@ -146,14 +193,34 @@ def main():
         # else:
         #     base_lr = 0.01  # Default value
         
+        # Memory management for different devices
+        if device.type == 'cuda':
+            # Enable automatic mixed precision for CUDA
+            scaler = GradScaler('cuda')
+        elif device.type == 'mps':
+            def clear_mps_cache():
+                if hasattr(torch.mps, 'empty_cache'):
+                    torch.mps.empty_cache()
+            import atexit
+            atexit.register(clear_mps_cache)
+        
+        # Training loop
         for epoch in range(start_epoch, epochs + 1):
+            # Clear cache if needed
+            if device.type == 'cuda':
+                torch.cuda.empty_cache()
+            elif device.type == 'mps':
+                if hasattr(torch.mps, 'empty_cache'):
+                    torch.mps.empty_cache()
+            
             print(f'\nEpoch: {epoch}')
             current_lr = optimizer.param_groups[0]['lr']
             print(f'Learning rate: {current_lr:.6f}')
             
             # Training phase
             train_loss, train_accuracy = train(model, device, train_loader, 
-                                             optimizer, criterion, epoch)
+                                             optimizer, criterion, epoch,
+                                             scaler=scaler if device.type == 'cuda' else None)
             
             # Validation phase
             val_loss, val_accuracy = test(model, device, val_loader, criterion)
@@ -200,6 +267,13 @@ def main():
                     'val_acc': val_acc,
                     'lr_history': lr_history
                 }, False, filename=f'checkpoint_epoch_{epoch}.pth.tar')
+            
+            # Print memory stats
+            if device.type == 'cuda':
+                print(f"\nGPU Memory: {torch.cuda.memory_allocated() / 1e9:.2f} GB "
+                      f"(Max: {torch.cuda.max_memory_allocated() / 1e9:.2f} GB)")
+            elif device.type == 'mps':
+                print_mps_memory()
         
         # Plot training curves
         plt.figure(figsize=(15, 5))
@@ -233,11 +307,16 @@ def main():
         #plt.show()
         
         # Save the plot as a PNG file
-        plt.savefig('images/training_curves.png')
+        plt.savefig(main_dir + 'images/training_curves.png')
         plt.close()
 
     except Exception as e:
         print(f"An error occurred: {e}")
+        if device.type == 'cuda':
+            torch.cuda.empty_cache()
+        elif device.type == 'mps':
+            if hasattr(torch.mps, 'empty_cache'):
+                torch.mps.empty_cache()
         # Save emergency checkpoint on error
         if 'model' in locals():
             save_checkpoint({
