@@ -16,8 +16,10 @@ from torch.amp import autocast, GradScaler
 from torch.cuda.amp import autocast
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.data.distributed import DistributedSampler
+import numpy as np
 
-main_dir = "/mnt/imagenet/assignment/"
+main_dir = "/mnt/imagenet/1ass/"
 
 def save_checkpoint(state, is_best, checkpoint_dir='checkpoints', filename='checkpoint.pth.tar'):
     """Save checkpoint and best model"""
@@ -25,14 +27,117 @@ def save_checkpoint(state, is_best, checkpoint_dir='checkpoints', filename='chec
         os.makedirs(main_dir + checkpoint_dir)
     
     filepath = os.path.join(main_dir, checkpoint_dir, filename)
-    torch.save(state, filepath)
+    # Save with more secure defaults
+    torch.save(state, filepath, weights_only=True)
     
     if is_best:
         best_filepath = os.path.join(main_dir, checkpoint_dir, 'model_best.pth.tar')
-        torch.save(state, best_filepath)
+        torch.save(state, best_filepath, weights_only=True)
 
-def main():
+def setup_distributed(rank, world_size):
+    os.environ['RANK'] = str(rank)
+    os.environ['WORLD_SIZE'] = str(world_size)
+    dist.init_process_group(
+        backend="nccl",
+        init_method="env://",
+        world_size=world_size,
+        rank=rank
+    )
+
+def cleanup():
+    dist.destroy_process_group()
+
+def main(rank=0, args=None):
     try:
+        # Set device first
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+        # Initialize process group only for multi-GPU setup
+        is_distributed = torch.cuda.is_available() and torch.cuda.device_count() > 1
+        if is_distributed:
+            setup_distributed(rank, torch.cuda.device_count())
+            device = torch.device(f"cuda:{rank}")
+            is_main_process = rank == 0
+        else:
+            is_main_process = True
+
+        # Set hyperparameters first
+        # Set default parameters based on device
+        if device.type == "cuda":
+            num_workers = 8
+            pin_memory = True
+            prefetch_factor = 2
+            default_batch_size = 256
+        elif device.type == "mps":
+            num_workers = 12
+            pin_memory = True
+            prefetch_factor = 2
+            default_batch_size = 128
+        else:
+            num_workers = 2
+            pin_memory = False
+            prefetch_factor = 2
+            default_batch_size = 64
+
+        # Override batch_size if provided in args
+        batch_size = args.batch_size if args and hasattr(args, 'batch_size') else default_batch_size
+
+        # Model setup
+        model = ResNet50(num_classes=1000).to(device, memory_format=torch.channels_last)
+        
+        # Wrap model in DDP only for multi-GPU
+        if is_distributed:
+            model = DDP(model, device_ids=[rank])
+
+        # Data loading
+        subset_fraction = 1.0
+        data_root = main_dir + '/../ILSVRC/Data/CLS-LOC'
+        annotations_root = main_dir + '/../ILSVRC/Annotations/CLS-LOC'
+        
+        train_dataset = ImageNetAlbumentations(
+            root=data_root,
+            annotations_root=annotations_root,
+            split='train',
+            transform=train_transforms,
+            subset_fraction=subset_fraction
+        )
+        
+        val_dataset = ImageNetAlbumentations(
+            root=data_root,
+            annotations_root=annotations_root,
+            split='val',
+            transform=val_transforms,
+            subset_fraction=subset_fraction
+        )
+        
+        # Data loading with DistributedSampler only for distributed training
+        train_sampler = None
+        val_sampler = None
+        if is_distributed:  # Only use samplers for multi-GPU
+            train_sampler = DistributedSampler(train_dataset)
+            val_sampler = DistributedSampler(val_dataset, shuffle=False)
+        
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=batch_size,
+            shuffle=(train_sampler is None),  # Shuffle if no sampler
+            sampler=train_sampler,
+            num_workers=num_workers,
+            pin_memory=True,
+            persistent_workers=True,
+            prefetch_factor=prefetch_factor
+        )
+        
+        val_loader = DataLoader(
+            val_dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            sampler=val_sampler,
+            num_workers=num_workers,
+            pin_memory=True,
+            persistent_workers=True
+        )
+        
         # Create checkpoint directory
         checkpoint_dir = 'checkpoints'
         if not os.path.exists(main_dir + checkpoint_dir):
@@ -52,7 +157,6 @@ def main():
             print(f"Available GPU memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
             
             # Hyperparameters optimized for 16GB GPU
-            batch_size = 512  # Increased for faster training
             num_workers = 8   # Adjust based on CPU cores
             pin_memory = True
             prefetch_factor = 2  # Prefetch 2 batches per worker
@@ -84,13 +188,6 @@ def main():
         momentum = 0.9
         weight_decay = 1e-4
 
-        # Model
-        model = ResNet50(num_classes=1000).to(device, memory_format=torch.channels_last)  # Use channels_last memory format
-        
-        if torch.cuda.device_count() > 1:
-            print(f"Using {torch.cuda.device_count()} GPUs!")
-            model = DDP(model)  # Use DistributedDataParallel instead of DataParallel
-        
         # Loss and optimizer
         criterion = nn.CrossEntropyLoss()
         optimizer = optim.SGD(model.parameters(), lr=base_lr,
@@ -117,48 +214,6 @@ def main():
             milestones=[warmup_epochs]
         )
         
-        # Data loading
-        subset_fraction = 1.0
-        data_root = main_dir + 'imagenet-object-localization-challenge/ILSVRC/Data/CLS-LOC'
-        annotations_root = main_dir + 'imagenet-object-localization-challenge/ILSVRC/Annotations/CLS-LOC'
-        
-        train_dataset = ImageNetAlbumentations(
-            root=data_root,
-            annotations_root=annotations_root,
-            split='train',
-            transform=train_transforms,
-            subset_fraction=subset_fraction
-        )
-        
-        val_dataset = ImageNetAlbumentations(
-            root=data_root,
-            annotations_root=annotations_root,
-            split='val',
-            transform=val_transforms,
-            subset_fraction=subset_fraction
-        )
-        
-        train_loader = DataLoader(
-            train_dataset,
-            batch_size=batch_size,
-            shuffle=True,
-            num_workers=num_workers,
-            pin_memory=pin_memory,
-            persistent_workers=True,
-            prefetch_factor=prefetch_factor,
-            generator=torch.Generator(device='cpu')
-        )
-        
-        val_loader = DataLoader(
-            val_dataset,
-            batch_size=batch_size,
-            shuffle=False,
-            num_workers=num_workers,
-            pin_memory=pin_memory,
-            persistent_workers=True,
-            generator=torch.Generator(device='cpu')
-        )
-        
         # Print model summary and parameters using torchinfo
         print(summary(model, input_size=(1, 3, 224, 224), device=device))
         
@@ -170,13 +225,35 @@ def main():
         checkpoint_path = os.path.join(main_dir, checkpoint_dir, 'checkpoint.pth.tar')
         if os.path.exists(checkpoint_path):
             print(f"=> loading checkpoint '{checkpoint_path}'")
-            checkpoint = torch.load(checkpoint_path)
-            start_epoch = checkpoint['epoch'] + 1
-            best_acc = checkpoint['best_acc']
+            # Load checkpoint with safe defaults
+            checkpoint = torch.load(
+                checkpoint_path,
+                map_location=device,
+                weights_only=True  # More secure loading
+            )
+            
+            # Load model weights
             model.load_state_dict(checkpoint['state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer'])
-            scheduler.load_state_dict(checkpoint['scheduler'])
-            print(f"=> loaded checkpoint 'epoch {checkpoint['epoch']}' (acc {checkpoint['best_acc']:.2f})")
+            
+            # Safely load other state information
+            start_epoch = checkpoint.get('epoch', 0) + 1
+            best_acc = checkpoint.get('best_acc', 0)
+            
+            # Load optimizer and scheduler states if available
+            if 'optimizer' in checkpoint:
+                optimizer.load_state_dict(checkpoint['optimizer'])
+            if 'scheduler' in checkpoint:
+                scheduler.load_state_dict(checkpoint['scheduler'])
+                
+            # Load history if available
+            train_losses = checkpoint.get('train_losses', [])
+            val_losses = checkpoint.get('val_losses', [])
+            train_acc = checkpoint.get('train_acc', [])
+            val_acc = checkpoint.get('val_acc', [])
+            lr_history = checkpoint.get('lr_history', [])
+            
+            print(f"=> loaded checkpoint 'epoch {checkpoint.get('epoch', 0)}' "
+                  f"(acc {checkpoint.get('best_acc', 0):.2f})")
         
         # Training and testing
         train_losses = []
@@ -206,6 +283,9 @@ def main():
         
         # Training loop
         for epoch in range(start_epoch, epochs + 1):
+            if train_sampler:
+                train_sampler.set_epoch(epoch)
+            
             # Clear cache if needed
             if device.type == 'cuda':
                 torch.cuda.empty_cache()
@@ -240,21 +320,7 @@ def main():
             best_acc = max(val_accuracy, best_acc)
             
             # Save checkpoint every epoch
-            save_checkpoint({
-                'epoch': epoch,
-                'state_dict': model.state_dict(),
-                'best_acc': best_acc,
-                'optimizer': optimizer.state_dict(),
-                'scheduler': scheduler.state_dict(),
-                'train_losses': train_losses,
-                'val_losses': val_losses,
-                'train_acc': train_acc,
-                'val_acc': val_acc,
-                'lr_history': lr_history
-            }, is_best)
-            
-            # Save additional checkpoint every 10 epochs
-            if epoch % 10 == 0:
+            if is_main_process:
                 save_checkpoint({
                     'epoch': epoch,
                     'state_dict': model.state_dict(),
@@ -266,7 +332,23 @@ def main():
                     'train_acc': train_acc,
                     'val_acc': val_acc,
                     'lr_history': lr_history
-                }, False, filename=f'checkpoint_epoch_{epoch}.pth.tar')
+                }, is_best)
+            
+            # Save additional checkpoint every 10 epochs
+            if epoch % 10 == 0:
+                if is_main_process:
+                    save_checkpoint({
+                        'epoch': epoch,
+                        'state_dict': model.state_dict(),
+                        'best_acc': best_acc,
+                        'optimizer': optimizer.state_dict(),
+                        'scheduler': scheduler.state_dict(),
+                        'train_losses': train_losses,
+                        'val_losses': val_losses,
+                        'train_acc': train_acc,
+                        'val_acc': val_acc,
+                        'lr_history': lr_history
+                    }, False, filename=f'checkpoint_epoch_{epoch}.pth.tar')
             
             # Print memory stats
             if device.type == 'cuda':
@@ -274,6 +356,19 @@ def main():
                       f"(Max: {torch.cuda.max_memory_allocated() / 1e9:.2f} GB)")
             elif device.type == 'mps':
                 print_mps_memory()
+            
+            # Save metrics to numpy file
+            if is_main_process:
+                metrics = {
+                    'train_losses': train_losses,
+                    'val_losses': val_losses,
+                    'train_acc': train_acc,
+                    'val_acc': val_acc,
+                    'lr_history': lr_history,
+                    'epochs': list(range(1, epoch + 1))
+                }
+                metrics_path = os.path.join(main_dir, 'metrics.npz')
+                np.savez(metrics_path, **metrics)
         
         # Plot training curves
         plt.figure(figsize=(15, 5))
@@ -307,30 +402,18 @@ def main():
         #plt.show()
         
         # Save the plot as a PNG file
-        plt.savefig(main_dir + 'images/training_curves.png')
+        plt.savefig(main_dir + '/images/training_curves.png')
         plt.close()
 
     except Exception as e:
         print(f"An error occurred: {e}")
-        if device.type == 'cuda':
-            torch.cuda.empty_cache()
-        elif device.type == 'mps':
-            if hasattr(torch.mps, 'empty_cache'):
-                torch.mps.empty_cache()
-        # Save emergency checkpoint on error
-        if 'model' in locals():
-            save_checkpoint({
-                'epoch': epoch if 'epoch' in locals() else 0,
-                'state_dict': model.state_dict(),
-                'best_acc': best_acc if 'best_acc' in locals() else 0,
-                'optimizer': optimizer.state_dict() if 'optimizer' in locals() else None,
-                'scheduler': scheduler.state_dict() if 'scheduler' in locals() else None,
-                'train_losses': train_losses if 'train_losses' in locals() else [],
-                'val_losses': val_losses if 'val_losses' in locals() else [],
-                'train_acc': train_acc if 'train_acc' in locals() else [],
-                'val_acc': val_acc if 'val_acc' in locals() else [],
-                'lr_history': lr_history if 'lr_history' in locals() else []
-            }, False, filename='emergency_checkpoint.pth.tar')
+        if torch.cuda.is_available() and torch.cuda.device_count() > 1:
+            try:
+                dist.destroy_process_group()
+            except:
+                pass
+        raise  # Re-raise the exception after cleanup
+
     finally:
         # Clean up
         if 'train_loader' in locals():
@@ -338,6 +421,11 @@ def main():
         if 'val_loader' in locals():
             val_loader._iterator = None
         plt.close('all')
+        if is_distributed:
+            try:
+                dist.destroy_process_group()
+            except:
+                pass
 
 if __name__ == '__main__':
-    main() 
+    main()  # Call without args when running directly 
