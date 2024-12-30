@@ -12,14 +12,13 @@ from torch.optim.lr_scheduler import MultiStepLR
 from torch.optim.lr_scheduler import LinearLR, SequentialLR
 from torch.optim.lr_scheduler import CosineAnnealingLR
 import torch.backends.mps
-from torch.amp import autocast, GradScaler
-from torch.cuda.amp import autocast
+from torch.amp import GradScaler
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
 import numpy as np
 
-main_dir = "/mnt/imagenet/1ass/"
+main_dir = os.getcwd()
 
 def save_checkpoint(state, is_best, checkpoint_dir='checkpoints', filename='checkpoint.pth.tar'):
     """Save checkpoint and best model"""
@@ -27,12 +26,12 @@ def save_checkpoint(state, is_best, checkpoint_dir='checkpoints', filename='chec
         os.makedirs(main_dir + checkpoint_dir)
     
     filepath = os.path.join(main_dir, checkpoint_dir, filename)
-    # Save with more secure defaults
-    torch.save(state, filepath, weights_only=True)
+    # Save without weights_only parameter
+    torch.save(state, filepath)
     
     if is_best:
         best_filepath = os.path.join(main_dir, checkpoint_dir, 'model_best.pth.tar')
-        torch.save(state, best_filepath, weights_only=True)
+        torch.save(state, best_filepath)
 
 def setup_distributed(rank, world_size):
     os.environ['RANK'] = str(rank)
@@ -225,11 +224,10 @@ def main(rank=0, args=None):
         checkpoint_path = os.path.join(main_dir, checkpoint_dir, 'checkpoint.pth.tar')
         if os.path.exists(checkpoint_path):
             print(f"=> loading checkpoint '{checkpoint_path}'")
-            # Load checkpoint with safe defaults
+            # Load checkpoint without weights_only parameter
             checkpoint = torch.load(
                 checkpoint_path,
-                map_location=device,
-                weights_only=True  # More secure loading
+                map_location=device
             )
             
             # Load model weights
@@ -359,12 +357,13 @@ def main(rank=0, args=None):
             
             # Save metrics to numpy file
             if is_main_process:
+                # Convert tensors to CPU before saving
                 metrics = {
-                    'train_losses': train_losses,
-                    'val_losses': val_losses,
-                    'train_acc': train_acc,
-                    'val_acc': val_acc,
-                    'lr_history': lr_history,
+                    'train_losses': [loss.cpu().item() if torch.is_tensor(loss) else loss for loss in train_losses],
+                    'val_losses': [loss.cpu().item() if torch.is_tensor(loss) else loss for loss in val_losses],
+                    'train_acc': [acc.cpu().item() if torch.is_tensor(acc) else acc for acc in train_acc],
+                    'val_acc': [acc.cpu().item() if torch.is_tensor(acc) else acc for acc in val_acc],
+                    'lr_history': [lr.cpu().item() if torch.is_tensor(lr) else lr for lr in lr_history],
                     'epochs': list(range(1, epoch + 1))
                 }
                 metrics_path = os.path.join(main_dir, 'metrics.npz')

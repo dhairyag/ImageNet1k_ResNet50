@@ -2,6 +2,7 @@
 torch
 torchvision
 numpy
+torchinfo
 
 # Data Augmentation
 albumentations
