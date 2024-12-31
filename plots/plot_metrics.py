@@ -84,7 +84,36 @@ def load_and_plot_metrics(metrics_file):
     ax3.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
     ax3.set_aspect(1.0/ax3.get_data_ratio(), adjustable='box')
     
-    plt.tight_layout()
+    # Add LR policy code as text
+    lr_policy = """# Learning rate scheduler with warmup and cosine decay
+warmup_epochs = 5
+warmup_scheduler = LinearLR(
+    optimizer,
+    start_factor=0.1,
+    end_factor=1.0,
+    total_iters=warmup_epochs
+)
+
+cosine_scheduler = CosineAnnealingLR(
+    optimizer,
+    T_max=epochs - warmup_epochs,
+    eta_min=1e-6
+)
+
+scheduler = SequentialLR(
+    optimizer,
+    schedulers=[warmup_scheduler, cosine_scheduler],
+    milestones=[warmup_epochs]
+)"""
+    
+    # Position the text box in figure coordinates (outside the plot)
+    plt.figtext(0.75, 0.5, lr_policy, fontsize=7, family='monospace', 
+                verticalalignment='center', bbox=dict(facecolor='white', 
+                alpha=0.8, edgecolor='lightgray', boxstyle='round,pad=1'))
+    
+    # Adjust layout to make room for the text
+    plt.subplots_adjust(right=0.7)
+    
     plt.savefig('learning_rate.png', dpi=300, bbox_inches='tight')
     plt.close('all')
 
