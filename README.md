@@ -12,9 +12,6 @@ This project was trained on AWS EC2 using a `g4dn.2xlarge` instance with the fol
 - Deep Learning AMI with PyTorch 2.5.1 and CUDA 12.4
 - Ubuntu 22.04 LTS
 
-## GPU Stats from AWS Console
-![AWS GPU Stats](images/aws_screenshot.png)
-
 ## Architecture
 
 - **Model**: ResNet50 (50-layer Residual Network)
@@ -23,7 +20,7 @@ This project was trained on AWS EC2 using a `g4dn.2xlarge` instance with the fol
 
 ## Performance Monitoring
 
-### Accuracy and Loss [Link to complete text log](output.log)
+### Accuracy and Loss [(Link to complete text log)](output.log)
 The training and validation accuracy achieves it's target of 70% around epoch 64 epochs.
 It is shown along with the loss curves below:
 ![Accuracy and Loss](plots/metrics.png)
@@ -42,6 +39,9 @@ This schedule helps stabilize early training while ensuring good convergence.
 ```bash
 GPU Memory: XX.XX GB (Max: XX.XX GB)
 ```
+
+## GPU Stats from AWS Console
+![AWS GPU Stats](images/aws_screenshot.png)
 
 ## Directory Structure
 ```bash
