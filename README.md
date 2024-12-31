@@ -2,6 +2,8 @@
 
 A PyTorch implementation of ResNet50 training on ImageNet, with support for single/multi-GPU training, mixed precision, and various optimizations.
 
+### [Link to HuggingFace Demo App](https://huggingface.co/spaces/dhairyashil/ImageNet1k)
+
 ## Cloud Training
 
 This project was trained on AWS EC2 using a `g4dn.2xlarge` instance with the following specifications:
@@ -14,8 +16,8 @@ This project was trained on AWS EC2 using a `g4dn.2xlarge` instance with the fol
 
 ## Architecture
 
-- **Model**: ResNet50 (50-layer Residual Network)
-- **Dataset**: ImageNet ILSVRC2012
+- **Model**: ResNet50 (50-layer Residual Network) ([Total params: 25.5M](summary_model.md))
+- **Dataset**: ImageNet ILSVRC2012 (1.28M images)
 - **Framework**: PyTorch with CUDA/MPS support
 
 ## Performance Monitoring
