@@ -22,7 +22,7 @@ This project was trained on AWS EC2 using a `g4dn.2xlarge` instance with the fol
 
 ## Performance Monitoring
 
-### Accuracy and Loss [(Link to complete text log)](output.log)
+### Accuracy and Loss [(Link to complete text log)](log_output.md)
 The training and validation accuracy achieves it's target of 70% around epoch 64 epochs.
 It is shown along with the loss curves below:
 ![Accuracy and Loss](plots/metrics.png)

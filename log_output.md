@@ -1,3 +1,4 @@
+```bash
 Epoch: 1
 Learning rate: 0.005000
 Train Epoch: 1 Loss: 5.872 Acc@1 3.611 Acc@5 11.045: 100%|██████████| 10010/10010 [3:06:24<00:00,  1.12s/it]
@@ -627,3 +628,4 @@ Test set: Average loss: 1.1063, Acc@1: 72.124%, Acc@5: 90.970%
 
 
 GPU Memory: 0.44 GB (Max: 15.47 GB)
+```
