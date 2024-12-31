@@ -4,7 +4,7 @@ A PyTorch implementation of ResNet50 training on ImageNet, with support for sing
 
 ## Cloud Training
 
-This project was trained on AWS EC2 using a g4dn.2xlarge instance with the following specifications:
+This project was trained on AWS EC2 using a `g4dn.2xlarge` instance with the following specifications:
 
 - 1 NVIDIA T4 GPU with 16GB VRAM
 - 8 vCPUs (Intel Cascade Lake)
@@ -13,7 +13,7 @@ This project was trained on AWS EC2 using a g4dn.2xlarge instance with the follo
 - Ubuntu 22.04 LTS
 
 ## GPU Stats from AWS Console
-![AWS GPU Stats](images/aws_gpu_stats.png)
+![AWS GPU Stats](images/aws_screenshot.png)
 
 ## Architecture
 
@@ -23,7 +23,7 @@ This project was trained on AWS EC2 using a g4dn.2xlarge instance with the follo
 
 ## Performance Monitoring
 
-### Accuracy and Loss
+### Accuracy and Loss [Link to complete text log](output.log)
 The training and validation accuracy achieves it's target of 70% around epoch 64 epochs.
 It is shown along with the loss curves below:
 ![Accuracy and Loss](plots/metrics.png)
