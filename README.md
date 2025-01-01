@@ -2,7 +2,7 @@
 
 A PyTorch implementation of ResNet50 training on ImageNet, with support for single/multi-GPU training, mixed precision, and various optimizations.
 
-### [Link to HuggingFace Demo App](https://huggingface.co/spaces/dhairyashil/ImageNet1k)
+### [Link to HuggingFace Demo App](https://huggingface.co/spaces/dhairyashil/ImageNet1k) (Acc@1: 75.212%, Acc@5: 92.668% at epoch 80)
 
 ## Cloud Training
 

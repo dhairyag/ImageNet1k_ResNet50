@@ -61,7 +61,7 @@ def save_metrics(metrics, output_file):
 
 if __name__ == '__main__':
     # Example usage
-    log_file = '../output.log'
+    log_file = '../log_output.md'
     output_file = '../metrics.json'
     
     metrics = parse_log_file(log_file)

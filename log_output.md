@@ -628,4 +628,95 @@ Test set: Average loss: 1.1063, Acc@1: 72.124%, Acc@5: 90.970%
 
 
 GPU Memory: 0.44 GB (Max: 15.47 GB)
+
+Epoch: 71
+Learning rate: 0.006526
+Train Epoch: 71 Loss: 1.213 Acc@1 70.881 Acc@5 88.650: 100%|██████████| 5005/5005 [59:09<00:00,  1.41it/s]
+
+Test set: Average loss: 1.1130, Acc@1: 71.714%, Acc@5: 90.904%
+
+
+GPU Memory: 0.44 GB (Max: 15.47 GB)
+
+Epoch: 72
+Learning rate: 0.005916
+Train Epoch: 72 Loss: 1.188 Acc@1 71.438 Acc@5 88.902: 100%|██████████| 5005/5005 [59:10<00:00,  1.41it/s]
+
+Test set: Average loss: 1.0799, Acc@1: 72.718%, Acc@5: 91.400%
+
+
+GPU Memory: 0.44 GB (Max: 15.47 GB)
+
+Epoch: 73
+Learning rate: 0.005332
+Train Epoch: 73 Loss: 1.163 Acc@1 71.995 Acc@5 89.198: 100%|██████████| 5005/5005 [59:09<00:00,  1.41it/s]
+
+Test set: Average loss: 1.0546, Acc@1: 73.176%, Acc@5: 91.594%
+
+
+GPU Memory: 0.44 GB (Max: 15.47 GB)
+
+Epoch: 74
+Learning rate: 0.004775
+Train Epoch: 74 Loss: 1.142 Acc@1 72.485 Acc@5 89.464: 100%|██████████| 5005/5005 [59:09<00:00,  1.41it/s]
+
+Test set: Average loss: 1.0508, Acc@1: 73.396%, Acc@5: 91.704%
+
+
+GPU Memory: 0.44 GB (Max: 15.47 GB)
+
+Epoch: 75
+Learning rate: 0.004246
+Train Epoch: 75 Loss: 1.115 Acc@1 73.053 Acc@5 89.798: 100%|██████████| 5005/5005 [59:09<00:00,  1.41it/s]
+
+Test set: Average loss: 1.0437, Acc@1: 73.472%, Acc@5: 91.824%
+
+
+GPU Memory: 0.44 GB (Max: 15.47 GB)
+
+Epoch: 76
+Learning rate: 0.003745
+Train Epoch: 76 Loss: 1.089 Acc@1 73.660 Acc@5 90.077: 100%|██████████| 5005/5005 [59:09<00:00,  1.41it/s]
+
+Test set: Average loss: 1.0169, Acc@1: 74.284%, Acc@5: 92.148%
+
+
+GPU Memory: 0.44 GB (Max: 15.47 GB)
+
+Epoch: 77
+Learning rate: 0.003274
+Train Epoch: 77 Loss: 1.065 Acc@1 74.206 Acc@5 90.352: 100%|██████████| 5005/5005 [59:09<00:00,  1.41it/s]
+
+Test set: Average loss: 1.0096, Acc@1: 74.416%, Acc@5: 92.160%
+
+
+GPU Memory: 0.44 GB (Max: 15.47 GB)
+
+Epoch: 78
+Learning rate: 0.002832
+Train Epoch: 78 Loss: 1.041 Acc@1 74.802 Acc@5 90.620: 100%|██████████| 5005/5005 [59:09<00:00,  1.41it/s]
+
+Test set: Average loss: 1.0017, Acc@1: 74.600%, Acc@5: 92.334%
+
+
+GPU Memory: 0.44 GB (Max: 15.47 GB)
+
+Epoch: 79
+Learning rate: 0.002420
+Train Epoch: 79 Loss: 1.017 Acc@1 75.341 Acc@5 90.899: 100%|██████████| 5005/5005 [59:09<00:00,  1.41it/s]
+
+Test set: Average loss: 0.9884, Acc@1: 74.902%, Acc@5: 92.484%
+
+
+GPU Memory: 0.44 GB (Max: 15.47 GB)
+
+Epoch: 80
+Learning rate: 0.002039
+Train Epoch: 80 Loss: 0.992 Acc@1 75.935 Acc@5 91.191: 100%|██████████| 5005/5005 [59:10<00:00,  1.41it/s]
+
+Test set: Average loss: 0.9770, Acc@1: 75.212%, Acc@5: 92.668%
+
+
+GPU Memory: 0.44 GB (Max: 15.47 GB)
+
 ```

@@ -50,7 +50,7 @@ def load_and_plot_metrics(metrics_file):
     ax1.set_ylabel('Accuracy (%)')
     ax1.legend()
     ax1.grid(True, linestyle=':', alpha=0.6)
-    ax1.set_xlim(0, 75)
+    ax1.set_xlim(0, 82)
     ax1.set_ylim(0, 100)
     ax1.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
     ax1.set_aspect(1.0/ax1.get_data_ratio(), adjustable='box')
@@ -63,7 +63,7 @@ def load_and_plot_metrics(metrics_file):
     ax2.set_ylabel('Loss')
     ax2.legend()
     ax2.grid(True, linestyle=':', alpha=0.6)
-    ax2.set_xlim(0, 75)
+    ax2.set_xlim(0, 82)
     ax2.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
     ax2.set_aspect(1.0/ax2.get_data_ratio(), adjustable='box')
     
@@ -80,7 +80,7 @@ def load_and_plot_metrics(metrics_file):
     ax3.set_ylabel('Learning Rate')
     ax3.legend()
     ax3.grid(True, linestyle=':', alpha=0.6)
-    ax3.set_xlim(0, 75)
+    ax3.set_xlim(0, 82)
     ax3.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
     ax3.set_aspect(1.0/ax3.get_data_ratio(), adjustable='box')
     
